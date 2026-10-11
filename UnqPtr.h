@@ -1,6 +1,8 @@
 #ifndef SMARTPTR_UNQ_PTR_H
 #define SMARTPTR_UNQ_PTR_H
 
+#include <stdexcept> // для логической ошибки в * и ->
+
 template<class T>
 class UnqPtr {
 private:
@@ -8,6 +10,12 @@ private:
 
     static T* CopyOf(const T* source) {
         return source != nullptr ? new T(*source) : nullptr;
+    }
+
+    void CheckNoEmpty() const {
+        if (this->ptr == nullptr) {
+            throw std::logic_error("UnqPtr: пустой указатель");
+        }
     }
 public:
     UnqPtr(): ptr(nullptr) {}
@@ -25,8 +33,8 @@ public:
         return *this;
     }
 
-    UnqPtr(UnqPtr&& other) noexcept : ptr(CopyOf(other.ptr)) {
-        delete(other.ptr);
+    UnqPtr(UnqPtr&& other) noexcept : ptr(other.ptr) { //потому что мы перемещаем а не создаём новый адрес
+        other.ptr = nullptr;
     }
     UnqPtr& operator=(UnqPtr &&other) noexcept { //нельзя передать перем с именем, только временную
         if (this == &other) { //сравниваем адрес с адресом
@@ -36,6 +44,38 @@ public:
         ptr  = other.ptr;
         other.ptr = nullptr;
         return *this;
+    }
+
+    T& operator*() const { //возвращаем то что лежит по адресу птр
+        CheckNoEmpty();
+        return *this->ptr;
+    }
+
+    T* operator->() const {
+        CheckNoEmpty();
+        return this->ptr;
+    }
+
+    T* Get() const {
+        return this->ptr;
+    }
+
+    explicit operator bool() const { // true, если указатель НЕ пустой
+        return (this->ptr != nullptr);
+    }
+
+    T* Release() { //возвращаем адрес, при этом оставляя после себя ничего
+        T* old = this->ptr;
+        this->ptr = nullptr;
+        return old;
+    }
+
+    void Reset(T* item = nullptr) { //значение по умолчанию для reset
+        if (this->ptr == item) {
+            return;
+        }
+        delete ptr;
+        ptr = item;
     }
 
 
