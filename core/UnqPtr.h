@@ -1,5 +1,5 @@
-#ifndef SMARTPTR_UNQ_PTR_H
-#define SMARTPTR_UNQ_PTR_H
+#ifndef SMARTPTR_UNQPTR_H
+#define SMARTPTR_UNQPTR_H
 
 #include <stdexcept> // для логической ошибки в * и ->
 
@@ -12,7 +12,7 @@ private:
         return source != nullptr ? new T(*source) : nullptr;
     }
 
-    void CheckNoEmpty() const {
+    void CheckNotEmpty() const {
         if (this->ptr == nullptr) {
             throw std::logic_error("UnqPtr: пустой указатель");
         }
@@ -28,7 +28,7 @@ public:
             return *this;
         }
         T *copy = CopyOf(other.ptr);
-        delete(this->ptr);
+        delete ptr;
         ptr = copy;
         return *this;
     }
@@ -40,19 +40,19 @@ public:
         if (this == &other) { //сравниваем адрес с адресом
             return *this;
         }
-        delete(this->ptr);
+        delete ptr;
         ptr  = other.ptr;
         other.ptr = nullptr;
         return *this;
     }
 
     T& operator*() const { //возвращаем то что лежит по адресу птр
-        CheckNoEmpty();
+        CheckNotEmpty();
         return *this->ptr;
     }
 
     T* operator->() const {
-        CheckNoEmpty();
+        CheckNotEmpty();
         return this->ptr;
     }
 
@@ -85,4 +85,4 @@ public:
 
 };
 
-#endif //SMARTPTR_UNQ_PTR_H
+#endif //SMARTPTR_UNQPTR_H
