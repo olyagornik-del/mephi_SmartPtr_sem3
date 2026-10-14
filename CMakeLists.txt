@@ -9,8 +9,10 @@ add_executable(SmartPtr main.cpp)
 add_executable(SmartPtr_tests
         tests/test.cpp
         tests/testUnqPtr.cpp
+        tests/testShrdPtr.cpp
         tests/Tracked.h
         core/UnqPtr.h
+        core/ShrdPtr.h
 )
 
 target_compile_options(SmartPtr_tests PRIVATE -fsanitize=address,undefined -g -O1)
