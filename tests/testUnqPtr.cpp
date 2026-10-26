@@ -1,6 +1,7 @@
 #include <cassert> // assert
 #include <cstdio> // printf
 #include <stdexcept> // logic_error, runtime_error
+#include <type_traits> // is_copy_constructible и др.
 #include <utility> // move
 
 #include "../core/UnqPtr.h"
@@ -27,60 +28,17 @@ void testUnqPtrCreate() {
     printf("  [OK] testUnqPtrCreate\n");
 }
 
-void testUnqPtrCopy() {
-    {
-        UnqPtr<Tracked> Original(new Tracked(7));
-        UnqPtr<Tracked> Copy(Original);
+void testUnqPtrNoCopy() {
+    // копирование запрещено — это проверяется при КОМПИЛЯЦИИ: если кто-то снова разрешит копирование,
+    // файл просто не соберётся
+    static_assert(!std::is_copy_constructible_v<UnqPtr<int>>, "UnqPtr нельзя копировать");
+    static_assert(!std::is_copy_assignable_v<UnqPtr<int>>, "UnqPtr нельзя присваивать копированием");
 
-        // глубокая копия — другой объект с тем же значением
-        assert(Copy.Get() != Original.Get());
-        assert(Copy->value == 7);
-        assert(Tracked::alive == 2);
+    // а перемещать можно
+    static_assert(std::is_move_constructible_v<UnqPtr<int>>, "UnqPtr можно перемещать");
+    static_assert(std::is_move_assignable_v<UnqPtr<int>>, "UnqPtr можно присваивать перемещением");
 
-        // копии независимы
-        Copy->value = 99;
-        assert(Original->value == 7);
-
-        // копия пустого — тоже пустая, новый объект не создаётся
-        UnqPtr<Tracked> Empty;
-        UnqPtr<Tracked> EmptyCopy(Empty);
-        assert(!EmptyCopy);
-        assert(Tracked::alive == 2);
-    }
-    // оба объекта удалились
-    assert(Tracked::alive == 0);
-
-    printf("  [OK] testUnqPtrCopy\n");
-}
-
-void testUnqPtrCopyAssign() {
-    {
-        UnqPtr<Tracked> A(new Tracked(1));
-        UnqPtr<Tracked> B(new Tracked(2));
-
-        B = A;
-        assert(B->value == 1);
-        assert(B.Get() != A.Get());
-        // старый объект B удалён, иначе было бы 3
-        assert(Tracked::alive == 2);
-
-        // самоприсваивание — ничего не меняется
-        // (через ссылку, чтобы компилятор не ругался на явное A = A)
-        Tracked *before = A.Get();
-        UnqPtr<Tracked> &SameA = A;
-        A = SameA;
-        assert(A.Get() == before);
-        assert(A->value == 1);
-
-        // присваивание пустого — B становится пустым, его объект удаляется
-        UnqPtr<Tracked> Empty;
-        B = Empty;
-        assert(!B);
-        assert(Tracked::alive == 1);
-    }
-    assert(Tracked::alive == 0);
-
-    printf("  [OK] testUnqPtrCopyAssign\n");
+    printf("  [OK] testUnqPtrNoCopy\n");
 }
 
 void testUnqPtrMove() {
@@ -210,9 +168,9 @@ void testUnqPtrNoLeaks() {
     // много операций подряд — в конце всё должно удалиться
     {
         UnqPtr<Tracked> A(new Tracked(1));
-        UnqPtr<Tracked> B(A);
+        UnqPtr<Tracked> B(new Tracked(2));
         UnqPtr<Tracked> C(std::move(B));
-        B = C;
+        B = std::move(C);
         C = std::move(A);
         A.Reset(new Tracked(5));
         B.Reset();
@@ -234,8 +192,7 @@ void testUnqPtrNoLeaks() {
 void testUnqPtrAll() {
     printf("=== Тесты UnqPtr ===\n");
     testUnqPtrCreate();
-    testUnqPtrCopy();
-    testUnqPtrCopyAssign();
+    testUnqPtrNoCopy();
     testUnqPtrMove();
     testUnqPtrMoveAssign();
     testUnqPtrAccess();

@@ -1,16 +1,13 @@
 #ifndef SMARTPTR_UNQPTR_H
 #define SMARTPTR_UNQPTR_H
 
+#include <concepts> // derived_from
 #include <stdexcept> // для логической ошибки в * и ->
 
 template<class T>
 class UnqPtr {
 private:
     T *ptr;
-
-    static T* CopyOf(const T* source) {
-        return source != nullptr ? new T(*source) : nullptr;
-    }
 
     void CheckNotEmpty() const {
         if (this->ptr == nullptr) {
@@ -22,16 +19,9 @@ public:
     explicit UnqPtr(T *item): ptr(item) {} //чтобы явно всегда задавалось
     //тк потом надо будет проворачивать подтипизацию, никаких конст ссылок
 
-    UnqPtr(const UnqPtr &other): ptr(CopyOf(other.ptr)) {} //это глубокая копия
-    UnqPtr& operator=(const UnqPtr& other) { //и это глубокая копия
-        if (this == &other) { //сравниваем адрес с адресом
-            return *this;
-        }
-        T *copy = CopyOf(other.ptr);
-        delete ptr;
-        ptr = copy;
-        return *this;
-    }
+    // копирование запрещено
+    UnqPtr(const UnqPtr &other) = delete;
+    UnqPtr& operator=(const UnqPtr &other) = delete;
 
     UnqPtr(UnqPtr&& other) noexcept : ptr(other.ptr) { //потому что мы перемещаем а не создаём новый адрес
         other.ptr = nullptr;
@@ -43,6 +33,18 @@ public:
         delete ptr;
         ptr  = other.ptr;
         other.ptr = nullptr;
+        return *this;
+    }
+
+    // подтипизация: UnqPtr<Cat> -> UnqPtr<Animal>, только перемещением
+    template <class U>
+        requires std::derived_from<U, T> // условие: U - наследник Т
+    UnqPtr(UnqPtr<U> &&other) noexcept: ptr(other.Release()) {} // U* -> T* само
+
+    template <class U>
+        requires std::derived_from<U, T>
+    UnqPtr& operator=(UnqPtr<U> &&other) noexcept {
+        Reset(other.Release()); // старый объект удалится внутри Reset
         return *this;
     }
 
