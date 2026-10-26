@@ -10,7 +10,9 @@ add_executable(SmartPtr_tests
         tests/test.cpp
         tests/testUnqPtr.cpp
         tests/testShrdPtr.cpp
+        tests/testSubtyping.cpp
         tests/Tracked.h
+        tests/Animals.h
         core/UnqPtr.h
         core/ShrdPtr.h
 )

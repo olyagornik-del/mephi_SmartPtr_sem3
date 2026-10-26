@@ -1,6 +1,7 @@
 #ifndef SMARTPTR_SHRDPTR_H
 #define SMARTPTR_SHRDPTR_H
 
+#include <concepts> // derived_from
 #include <cstddef> // size_t
 #include <stdexcept> // logic_error
 #include <utility> // move
@@ -29,6 +30,11 @@ class ShrdPtr {
 private:
     ShrdBlockBase *block; // счётчик + владение
     T *window;
+
+    // ShrdPtr<Cat> и ShrdPtr<Animal> — разные классы и не видят приватные поля друг друга;
+    // объявляем все ShrdPtr друзьями, чтобы при подтипизации можно было взять block и window у ShrdPtr<U>
+    template <class U>
+    friend class ShrdPtr;
 
     // отцепиться от блока: если мы были последними — удалить блок вместе с объектом
     void Detach() {
@@ -111,6 +117,47 @@ public:
         if (this == &other) {
             return *this;
         }
+        Detach();
+        block = other.block;
+        window = other.window;
+        other.block = nullptr;
+        other.window = nullptr;
+        return *this;
+    }
+
+    // подтипизация: ShrdPtr<Cat> -> ShrdPtr<Animal>, копированием и перемещением
+    // requires: эти методы существуют, только если U — наследник T
+    template <class U>
+        requires std::derived_from<U, T>
+    ShrdPtr(const ShrdPtr<U> &other): block(other.block), window(other.window) { // U* -> T* само
+        if (block != nullptr) {
+            block->count++;
+        }
+    }
+
+    template <class U>
+        requires std::derived_from<U, T>
+    ShrdPtr(ShrdPtr<U> &&other) noexcept: block(other.block), window(other.window) {
+        other.block = nullptr;
+        other.window = nullptr;
+    }
+
+    // other другого типа => это точно другой объект ShrdPtr, проверка на самоприсваивание не нужна
+    template <class U>
+        requires std::derived_from<U, T>
+    ShrdPtr& operator=(const ShrdPtr<U> &other) {
+        Detach();
+        block = other.block;
+        window = other.window;
+        if (block != nullptr) {
+            block->count++;
+        }
+        return *this;
+    }
+
+    template <class U>
+        requires std::derived_from<U, T>
+    ShrdPtr& operator=(ShrdPtr<U> &&other) noexcept {
         Detach();
         block = other.block;
         window = other.window;
