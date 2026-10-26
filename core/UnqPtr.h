@@ -2,7 +2,7 @@
 #define SMARTPTR_UNQPTR_H
 
 #include <concepts> // derived_from
-#include <stdexcept> // для логической ошибки в * и ->
+#include <stdexcept> // logic_error, out_of_range, invalid_argument
 
 template<class T>
 class UnqPtr {
@@ -85,6 +85,92 @@ public:
         delete ptr;
     }
 
+};
+
+// версия для массивов: UnqPtr<int[]> arr(10)
+// специализация: если T — массив, компилятор берёт этот класс, а не тот, что выше
+// отличия: delete[] вместо delete, operator[] с проверкой границ, хранится размер,
+// нет *, -> и подтипизации (массив Cat нельзя считать массивом Animal)
+template <class T>
+class UnqPtr<T[]> {
+private:
+    T *ptr;
+    int size;
+
+    void CheckIndex(int index) const {
+        if (ptr == nullptr) {
+            throw std::logic_error("UnqPtr<T[]>: пустой указатель");
+        }
+        if (index < 0 || index >= size) {
+            throw std::out_of_range("UnqPtr<T[]>: индекс вне массива");
+        }
+    }
+
+public:
+    UnqPtr(): ptr(nullptr), size(0) {}
+
+    // массив выделяем сами — пользователь не пишет new[] и не может ошибиться с размером
+    explicit UnqPtr(int size): ptr(nullptr), size(0) {
+        if (size < 0) {
+            throw std::invalid_argument("UnqPtr<T[]>: отрицательный размер");
+        }
+        if (size == 0) {
+            return; // пустой массив — память не выделяем
+        }
+        ptr = new T[size](); // () — элементы по умолчанию: для int нули, для классов — конструктор без аргументов
+        this->size = size;
+    }
+
+    // копировать нельзя, как и обычный UnqPtr
+    UnqPtr(const UnqPtr &other) = delete;
+    UnqPtr& operator=(const UnqPtr &other) = delete;
+
+    // перемещение — забираем массив вместе с размером
+    UnqPtr(UnqPtr &&other) noexcept: ptr(other.ptr), size(other.size) {
+        other.ptr = nullptr;
+        other.size = 0;
+    }
+
+    UnqPtr& operator=(UnqPtr &&other) noexcept {
+        if (this == &other) {
+            return *this;
+        }
+        delete[] ptr;
+        ptr = other.ptr;
+        size = other.size;
+        other.ptr = nullptr;
+        other.size = 0;
+        return *this;
+    }
+
+    // элемент по индексу; ссылка — чтобы можно было и читать, и менять: arr[3] = 5
+    T& operator[](int index) const {
+        CheckIndex(index);
+        return ptr[index];
+    }
+
+    T* Get() const {
+        return ptr;
+    }
+
+    int GetSize() const {
+        return size;
+    }
+
+    explicit operator bool() const {
+        return ptr != nullptr;
+    }
+
+    // удалить массив и стать пустым
+    void Reset() {
+        delete[] ptr;
+        ptr = nullptr;
+        size = 0;
+    }
+
+    ~UnqPtr() {
+        delete[] ptr;
+    }
 };
 
 #endif //SMARTPTR_UNQPTR_H

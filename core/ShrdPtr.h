@@ -3,7 +3,7 @@
 
 #include <concepts> // derived_from
 #include <cstddef> // size_t
-#include <stdexcept> // logic_error
+#include <stdexcept> // logic_error, out_of_range
 #include <utility> // move
 
 #include "UnqPtr.h"
@@ -25,6 +25,18 @@ struct ShrdBlock : ShrdBlockBase {
     explicit ShrdBlock(UnqPtr<T> &&source): master(std::move(source)) {}
 };
 
+// отпустить блок: уменьшить счётчик, и если владельцев не осталось — удалить блок вместе с объектом
+// общая функция для ShrdPtr<T> и ShrdPtr<T[]>
+inline void ReleaseShrdBlock(ShrdBlockBase *block) {
+    if (block == nullptr) {
+        return;
+    }
+    block->count--;
+    if (block->count == 0) {
+        delete block; // виртуальный деструктор -> ~ShrdBlock<T> -> ~UnqPtr<T> -> delete (или delete[])
+    }
+}
+
 template <class T>
 class ShrdPtr {
 private:
@@ -42,12 +54,7 @@ private:
         // чтобы не смотреть на удалённый блок
         block = nullptr;
         window = nullptr;
-        if (old != nullptr) {
-            old->count--;
-            if (old->count == 0) {
-                delete old; // виртуальный деструктор -> ~ShrdBlock<T> -> ~UnqPtr<T> -> delete объекта
-            }
-        }
+        ReleaseShrdBlock(old);
     }
 
     void CheckNotEmpty() const {
@@ -192,6 +199,122 @@ public:
     }
 
     // отпустить объект и стать пустым
+    void Reset() {
+        Detach();
+    }
+
+    ~ShrdPtr() {
+        Detach();
+    }
+};
+
+// версия для массивов: ShrdPtr<int[]> arr(10)
+// блоки те же: ShrdBlock<T[]> хранит UnqPtr<T[]>, а он сам удалит массив через delete[]
+// подтипизации нет — массив Cat нельзя считать массивом Animal
+template <class T>
+class ShrdPtr<T[]> {
+private:
+    ShrdBlockBase *block; // счётчик + владение
+    T *window; // на нулевой элемент: только доступ, не владение
+    int size; // хранится в каждом ShrdPtr: общий ShrdBlockBase про размер не знает
+
+    void Detach() {
+        ShrdBlockBase *old = block;
+        block = nullptr;
+        window = nullptr;
+        size = 0;
+        ReleaseShrdBlock(old);
+    }
+
+    void CheckIndex(int index) const {
+        if (window == nullptr) {
+            throw std::logic_error("ShrdPtr<T[]>: пустой указатель");
+        }
+        if (index < 0 || index >= size) {
+            throw std::out_of_range("ShrdPtr<T[]>: индекс вне массива");
+        }
+    }
+
+public:
+    ShrdPtr(): block(nullptr), window(nullptr), size(0) {}
+
+    // создаём массив через UnqPtr<T[]> и сразу отдаём его конструктору ниже
+    explicit ShrdPtr(int size): ShrdPtr(UnqPtr<T[]>(size)) {}
+
+    // забираем массив у UnqPtr<T[]> вместе с размером
+    explicit ShrdPtr(UnqPtr<T[]> &&source): block(nullptr), window(nullptr), size(0) {
+        if (!source) {
+            return;
+        }
+        window = source.Get();
+        size = source.GetSize();
+        // если new не сработает, source ещё владеет массивом и сам его удалит
+        block = new ShrdBlock<T[]>(std::move(source));
+    }
+
+    // копия — тот же массив, ещё один владелец
+    ShrdPtr(const ShrdPtr &other): block(other.block), window(other.window), size(other.size) {
+        if (block != nullptr) {
+            block->count++;
+        }
+    }
+
+    ShrdPtr& operator=(const ShrdPtr &other) {
+        if (this == &other) {
+            return *this;
+        }
+        Detach();
+        block = other.block;
+        window = other.window;
+        size = other.size;
+        if (block != nullptr) {
+            block->count++;
+        }
+        return *this;
+    }
+
+    // перемещение — счётчик не меняется
+    ShrdPtr(ShrdPtr &&other) noexcept: block(other.block), window(other.window), size(other.size) {
+        other.block = nullptr;
+        other.window = nullptr;
+        other.size = 0;
+    }
+
+    ShrdPtr& operator=(ShrdPtr &&other) noexcept {
+        if (this == &other) {
+            return *this;
+        }
+        Detach();
+        block = other.block;
+        window = other.window;
+        size = other.size;
+        other.block = nullptr;
+        other.window = nullptr;
+        other.size = 0;
+        return *this;
+    }
+
+    T& operator[](int index) const {
+        CheckIndex(index);
+        return window[index];
+    }
+
+    T* Get() const {
+        return window;
+    }
+
+    int GetSize() const {
+        return size;
+    }
+
+    explicit operator bool() const {
+        return window != nullptr;
+    }
+
+    size_t GetCount() const {
+        return block != nullptr ? block->count : 0;
+    }
+
     void Reset() {
         Detach();
     }

@@ -26,6 +26,7 @@ void testSubtypingCompile() {
     static_assert(std::is_constructible_v<UnqPtr<Animal>, UnqPtr<Cat>&&>);
     static_assert(std::is_assignable_v<UnqPtr<Animal>&, UnqPtr<Cat>&&>);
     static_assert(!std::is_constructible_v<UnqPtr<Animal>, const UnqPtr<Cat>&>); // копировать нельзя
+    static_assert(!std::is_assignable_v<UnqPtr<Animal>&, const UnqPtr<Cat>&>); // и присваивать копией тоже
 
     // UnqPtr: вниз, между «братьями» и между несвязанными типами — нельзя
     static_assert(!std::is_constructible_v<UnqPtr<Cat>, UnqPtr<Animal>&&>);
